@@ -76,7 +76,7 @@ class CodexClient {
       this.onExit();
     });
     try {
-      await this.request('initialize', { clientInfo: { name: 'siyuan_codex_sidebar', title: 'SiYuan Codex Sidebar', version: '0.2.0' } });
+      await this.request('initialize', { clientInfo: { name: 'siyuan_codex_sidebar', title: 'SiYuan Codex Sidebar', version: '0.2.1' } });
       this.notify('initialized', {});
     } catch (e) { this.stop(); throw e; }
   }
