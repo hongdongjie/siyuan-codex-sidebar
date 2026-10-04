@@ -2,14 +2,32 @@
   "name": "siyuan-codex-sidebar",
   "author": "hongdongjie",
   "url": "https://github.com/hongdongjie/siyuan-codex-sidebar",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "minAppVersion": "3.8.6",
-  "backends": ["windows"],
-  "frontends": ["desktop"],
+  "backends": [
+    "windows"
+  ],
+  "frontends": [
+    "desktop"
+  ],
   "disabledInPublish": true,
-  "displayName": {"default": "Codex Sidebar", "zh-CN": "Codex 侧边栏"},
-  "description": {"default": "Chat with Codex inside SiYuan using your local Codex and MCP configuration. Windows desktop; Chinese UI.", "zh-CN": "在思源侧栏使用 Codex，复用本机登录与 MCP，支持前置提示词、模型选择与历史对话。仅支持 Windows 桌面端。"},
-  "readme": {"default": "README.md"},
+  "displayName": {
+    "default": "Codex Sidebar",
+    "zh-CN": "Codex 侧边栏"
+  },
+  "description": {
+    "default": "Chat with Codex inside SiYuan using your local Codex and MCP configuration. Windows desktop; Chinese UI.",
+    "zh-CN": "在思源侧栏与 Codex 对话，复用本机登录与 MCP，支持模型与思考强度选择、上下文用量和历史对话。仅支持 Windows 桌面端。"
+  },
+  "readme": {
+    "default": "README.md"
+  },
   "icon": "icon.png",
-  "keywords": ["AI", "Codex", "MCP", "聊天", "笔记问答"]
+  "keywords": [
+    "AI",
+    "Codex",
+    "MCP",
+    "聊天",
+    "笔记问答"
+  ]
 }

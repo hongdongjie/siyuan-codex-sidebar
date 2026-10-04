@@ -7,22 +7,36 @@ const path = nativeRequire('path');
 const os = nativeRequire('os');
 
 function resolveCodex(explicit = '') {
+  const root = path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'OpenAI', 'Codex', 'bin');
+  const hasHost = target => fs.existsSync(path.join(path.dirname(target), 'codex-code-mode-host.exe'));
+  const isDesktop = target => {
+    const relative = path.relative(root, target);
+    return relative && !relative.startsWith('..') && !path.isAbsolute(relative);
+  };
+  const incomplete = () => new Error('Codex 安装缺少 codex-code-mode-host.exe。请更新 Codex，或在设置中选择配套文件完整的 codex.exe。');
   if (explicit.trim()) {
     const target = explicit.trim().replace(/^"|"$/g, '');
     if (!path.isAbsolute(target) || !fs.existsSync(target) || !/\.exe$/i.test(target))
       throw new Error('请填写有效的 codex.exe 完整路径。');
+    if (isDesktop(target) && !hasHost(target)) throw incomplete();
     return target;
   }
-  const root = path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'OpenAI', 'Codex', 'bin');
+  let foundIncomplete = false;
   if (fs.existsSync(root)) {
     const candidates = fs.readdirSync(root).map(d => path.join(root, d, 'codex.exe')).filter(p => fs.existsSync(p));
     candidates.sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
-    if (candidates.length) return candidates[0];
+    const complete = candidates.find(hasHost);
+    if (complete) return complete;
+    foundIncomplete = candidates.length > 0;
   }
   for (const dir of (process.env.PATH || '').split(path.delimiter)) {
     const target = path.join(dir, 'codex.exe');
-    if (fs.existsSync(target)) return target;
+    if (fs.existsSync(target)) {
+      if (isDesktop(target) && !hasHost(target)) { foundIncomplete = true; continue; }
+      return target;
+    }
   }
+  if (foundIncomplete) throw incomplete();
   throw new Error('未找到 codex.exe。请在设置里指定完整路径。');
 }
 
@@ -62,7 +76,7 @@ class CodexClient {
       this.onExit();
     });
     try {
-      await this.request('initialize', { clientInfo: { name: 'siyuan_codex_sidebar', title: 'SiYuan Codex Sidebar', version: '0.1.0' } });
+      await this.request('initialize', { clientInfo: { name: 'siyuan_codex_sidebar', title: 'SiYuan Codex Sidebar', version: '0.2.0' } });
       this.notify('initialized', {});
     } catch (e) { this.stop(); throw e; }
   }

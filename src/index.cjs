@@ -5,10 +5,12 @@ const nativeRequire = typeof window !== 'undefined' && window.require ? window.r
 const os = nativeRequire('os');
 
 const STORE = 'sidebar.json';
-const DEFAULTS = { prompt: '', executable: '', codexHome: '', model: '' };
+const DEFAULTS = { prompt: '', executable: '', codexHome: '', model: '', effort: '' };
+const EFFORT_LABELS = { none: '无', minimal: '最低', low: '低', medium: '中', high: '高', xhigh: '更高', max: '最高', ultra: '超高' };
 const ICON = '<symbol id="iconCodexSidebar" viewBox="0 0 24 24"><path d="m8 6-6 6 6 6m8-12 6 6-6 6M14 3l-4 18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>';
 // Lucide icons; see LICENSE-lucide.txt. Keep the original geometry across the toolbar.
 const UI_ICONS = {
+  chevron: '<path d="m6 9 6 6 6-6"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   settings: '<path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/>',
   history: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5M12 7v5l4 2"/>',
@@ -81,7 +83,7 @@ module.exports = class CodexSidebar extends Plugin {
       onExit: () => {
         if (this.unloading) return;
         this.connected = false; this.busy = false; this.loadedThreads.clear(); this.approvals.clear();
-        this.authenticated = false; this.loginPending = false; this.turnId = null;
+        this.authenticated = false; this.turnId = null;
         this.status('Codex 连接已断开，正在等待自动重连。', true); this.renderApprovals(); this.controls(); this.persist();
         this.scheduleReconnect();
       }
@@ -116,7 +118,7 @@ module.exports = class CodexSidebar extends Plugin {
   }
   session() { return this.state.sessions.find(s => s.id === this.state.activeId); }
   createSession() {
-    const s = { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, title: '新对话', prompt: this.state.settings.prompt, model: this.state.settings.model, messages: [], threadId: null };
+    const s = { id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, title: '新对话', prompt: this.state.settings.prompt, model: this.state.settings.model, effort: this.state.settings.effort, messages: [], threadId: null };
     this.state.sessions.push(s); this.state.activeId = s.id; return s;
   }
   persist() {
@@ -140,7 +142,7 @@ module.exports = class CodexSidebar extends Plugin {
     this.historyButton = iconButton('history', '历史记录', () => this.toggleHistory());
     this.historyButton.setAttribute('aria-expanded', 'false');
     header.append(this.newButton, this.historyButton, iconButton('settings', '设置前置提示词与 Codex 连接', () => this.toggleSettings()));
-    const min = iconButton('minus', '收起侧栏', () => {}, 'block__icon'); min.setAttribute('data-type', 'min');
+    const min = iconButton('minus', '收起侧栏', () => {}, 'block__icon block__icon--show'); min.setAttribute('data-type', 'min');
     header.append(min);
     this.root.append(header);
     this.historyPanel = el('section', 'cs-history'); this.historyPanel.hidden = true;
@@ -179,18 +181,75 @@ module.exports = class CodexSidebar extends Plugin {
       if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); if (!this.busy) this.send(); }
     });
     composer.append(this.input);
+    const choices = el('div', 'cs-model-controls');
+    this.modelTrigger = button('', '选择模型与思考强度', () => this.toggleModelPanel(), 'cs-model-trigger');
+    this.modelTrigger.setAttribute('aria-haspopup', 'dialog'); this.modelTrigger.setAttribute('aria-expanded', 'false');
+    this.contextControl = el('div', 'cs-context-control');
+    this.contextButton = button('', '上下文窗口用量', () => this.showContextUsage(true), 'cs-context-button');
+    this.contextButton.removeAttribute('title');
+    this.contextButton.innerHTML = '<svg class="cs-context-ring" viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><circle class="cs-context-track" cx="10" cy="10" r="7"/><circle class="cs-context-progress" cx="10" cy="10" r="7" pathLength="100"/></svg>';
+    this.contextProgress = this.contextButton.querySelector('.cs-context-progress');
+    this.contextTooltip = el('div', 'cs-context-tooltip'); this.contextTooltip.hidden = true;
+    this.contextTooltip.id = `cs-context-${Math.random().toString(36).slice(2)}`;
+    this.contextTooltip.setAttribute('role', 'tooltip'); this.contextButton.setAttribute('aria-describedby', this.contextTooltip.id);
+    this.contextTitle = el('div', 'cs-context-title', '背景信息窗口：');
+    this.contextPercent = el('div'); this.contextTokens = el('div');
+    this.contextTooltip.append(this.contextTitle, this.contextPercent, this.contextTokens);
+    this.contextControl.append(this.contextButton, this.contextTooltip);
+    this.contextControl.addEventListener('mouseenter', () => this.showContextUsage(true));
+    this.contextControl.addEventListener('mouseleave', () => { if (document.activeElement !== this.contextButton) this.showContextUsage(false); });
+    this.contextButton.addEventListener('focus', () => this.showContextUsage(true));
+    this.contextButton.addEventListener('blur', () => this.showContextUsage(false));
+    this.modelName = el('span', 'cs-model-name'); this.effortName = el('span', 'cs-effort-name');
+    const arrow = el('span', 'cs-model-chevron'); arrow.innerHTML = icon('chevron');
+    this.modelTrigger.append(this.modelName, this.effortName, arrow);
+    this.modelPanel = el('section', 'cs-model-panel'); this.modelPanel.hidden = true;
+    this.modelPanel.id = `cs-model-panel-${Math.random().toString(36).slice(2)}`;
+    this.modelPanel.setAttribute('role', 'dialog'); this.modelPanel.setAttribute('aria-label', '模型与思考强度');
+    this.modelTrigger.setAttribute('aria-controls', this.modelPanel.id);
+    this.modelSelect = el('select', 'cs-model-select'); this.modelSelect.setAttribute('aria-label', '选择模型');
+    this.effortSelect = el('select', 'cs-effort-select'); this.effortSelect.setAttribute('aria-label', '思考强度');
+    this.effortSelect.hidden = true;
+    this.modelSelect.addEventListener('change', () => this.changeSelection(true));
+    this.effortSelect.addEventListener('change', () => this.changeSelection(false));
+    const panelHeader = el('div', 'cs-model-panel-header');
+    this.effortHeading = el('span', 'cs-effort-heading');
+    panelHeader.append(this.effortHeading);
+    this.effortSlider = el('input', 'cs-effort-slider'); this.effortSlider.type = 'range'; this.effortSlider.min = '0'; this.effortSlider.step = '1';
+    this.effortSlider.setAttribute('aria-label', '思考强度');
+    this.effortSlider.addEventListener('input', () => {
+      this.effortSelect.value = this.effortOptions?.[Number(this.effortSlider.value)]?.reasoningEffort || '';
+      this.changeSelection(false);
+    });
+    const sliderTrack = el('div', 'cs-effort-track');
+    this.effortDots = el('div', 'cs-effort-dots'); this.effortDots.setAttribute('aria-hidden', 'true');
+    sliderTrack.append(this.effortSlider, this.effortDots);
+    this.modelPanel.append(panelHeader, this.modelSelect, sliderTrack, this.effortSelect);
+    choices.append(this.contextControl, this.modelTrigger, this.modelPanel);
+    this.modelHint = el('div', 'cs-model-hint'); this.modelHint.setAttribute('role', 'status'); this.modelHint.hidden = true;
+    window.addEventListener('focus', () => this.refreshModels(), { signal: this.historyEvents.signal });
+    document.addEventListener('pointerdown', e => { if (!choices.contains(e.target)) this.closeModelPanel(); }, { signal: this.historyEvents.signal });
+    document.addEventListener('focusin', e => { if (!choices.contains(e.target)) this.closeModelPanel(); }, { signal: this.historyEvents.signal });
+    document.addEventListener('pointerdown', e => { if (!this.contextControl.contains(e.target)) this.showContextUsage(false); }, { signal: this.historyEvents.signal });
+    choices.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && !this.contextTooltip.hidden) { e.preventDefault(); e.stopPropagation(); this.showContextUsage(false); return; }
+      if (e.key === 'Escape' && !this.modelPanel.hidden) { e.preventDefault(); e.stopPropagation(); this.closeModelPanel(); this.modelTrigger.focus(); }
+      if (e.key === 'ArrowDown' && e.target === this.modelTrigger) { e.preventDefault(); if (this.modelPanel.hidden) this.toggleModelPanel(); }
+    });
     const actions = el('div', 'cs-actions');
-    this.loginButton = button('登录 ChatGPT', '通过浏览器登录 Codex', () => this.login());
     this.sendButton = button('发送', '发送消息（Enter）；Shift+Enter 换行', () => this.send(), 'cs-primary');
     this.stopButton = button('停止', '停止生成', () => this.interrupt());
-    actions.append(this.loginButton, el('span', 'cs-spacer'), this.stopButton, this.sendButton);
-    composer.append(actions); this.root.append(composer);
+    actions.append(choices, el('span', 'cs-spacer'), this.stopButton, this.sendButton);
+    composer.append(actions, this.modelHint); this.root.append(composer);
     this.renderSessions(); this.renderMessages(); this.renderApprovals(); this.status(this.statusText, this.statusError); this.controls();
+    this.refreshModels();
   }
   renderSessions() {
     if (!this.sessionsNode) return;
     this.sessionsNode.replaceChildren();
-    for (const s of [...this.state.sessions].reverse()) {
+    const conversations = this.state.sessions.filter(s => s.messages?.some(m => m.role === 'user' && m.text?.trim()));
+    if (!conversations.length) this.sessionsNode.append(el('div', 'cs-history-heading', '暂无历史对话'));
+    for (const s of [...conversations].reverse()) {
       const item = button('', s.title, () => {
         if (this.busy || this.editing) return;
         this.session().draft = this.input.value; this.state.activeId = s.id;
@@ -208,6 +267,40 @@ module.exports = class CodexSidebar extends Plugin {
   closeHistory() {
     if (this.historyPanel) this.historyPanel.hidden = true;
     this.historyButton?.setAttribute('aria-expanded', 'false');
+  }
+  closeModelPanel() {
+    if (this.modelPanel) this.modelPanel.hidden = true;
+    this.modelTrigger?.setAttribute('aria-expanded', 'false');
+  }
+  showContextUsage(visible) {
+    if (!this.contextTooltip) return;
+    if (visible) { this.closeModelPanel(); this.renderContextUsage(); }
+    this.contextTooltip.hidden = !visible;
+  }
+  contextUsage(session = this.session()) {
+    const usage = session?.tokenUsage;
+    const used = usage?.last?.totalTokens;
+    const capacity = usage?.modelContextWindow;
+    if (!Number.isFinite(used) || used < 0 || !Number.isFinite(capacity) || capacity <= 0) return null;
+    const percent = Math.min(100, Math.max(0, Math.round(used / capacity * 100)));
+    return { used, capacity, percent, remaining: 100 - percent };
+  }
+  renderContextUsage() {
+    if (!this.contextButton) return;
+    const usage = this.contextUsage();
+    const compact = value => value >= 1000 ? `${Math.round(value / 1000)}k` : String(value);
+    this.contextProgress.setAttribute('stroke-dasharray', `${usage?.percent || 0} 100`);
+    this.contextPercent.textContent = usage ? `${usage.percent}% 已用（剩余 ${usage.remaining}%）` : '暂无上下文用量';
+    this.contextTokens.textContent = usage ? `已用 ${compact(usage.used)} 标记，共 ${compact(usage.capacity)}` : '等待 Codex 返回数据';
+    this.contextButton.setAttribute('aria-label', usage ? `上下文窗口：${usage.percent}% 已用，剩余 ${usage.remaining}%，已用 ${usage.used} 标记，共 ${usage.capacity}` : '上下文窗口用量：暂无数据');
+  }
+  toggleModelPanel() {
+    if (this.busy) return;
+    if (!this.modelPanel.hidden) { this.closeModelPanel(); return; }
+    this.closeHistory(); this.showContextUsage(false); this.renderModels(); this.modelPanel.hidden = false;
+    this.modelTrigger.setAttribute('aria-expanded', 'true');
+    this.refreshModels();
+    this.effortSlider.disabled ? this.modelSelect.focus() : this.effortSlider.focus();
   }
   toggleHistory() {
     if (this.busy || this.editing) return;
@@ -288,6 +381,13 @@ module.exports = class CodexSidebar extends Plugin {
   }
   controls() {
     if (!this.root) return;
+    this.renderModels();
+    this.modelSelect.disabled = this.busy;
+    this.modelTrigger.disabled = this.busy;
+    this.renderContextUsage();
+    if (this.busy) this.closeModelPanel();
+    this.effortSelect.disabled = this.busy || !this.effortAvailable;
+
     for (const edit of this.editButtons || []) edit.disabled = this.busy;
     this.sendButton.textContent = '发送';
     if (this.inlineInput) this.inlineInput.disabled = this.busy;
@@ -298,8 +398,6 @@ module.exports = class CodexSidebar extends Plugin {
     if (this.busy || this.editing) this.closeHistory();
     this.sendButton.disabled = this.busy || !!this.editing || !this.input.value.trim();
     this.stopButton.hidden = !this.busy; this.stopButton.disabled = this.stopping;
-    this.loginButton.hidden = this.authenticated === true;
-    this.loginButton.disabled = this.busy || !!this.loginPending;
     this.settingsSave && (this.settingsSave.disabled = this.busy);
   }
   toggleSettings() {
@@ -336,21 +434,77 @@ module.exports = class CodexSidebar extends Plugin {
     this.settingsDialog.showModal(); this.promptInput.focus();
     this.settingsSave.disabled = this.busy; this.refreshModels();
   }
-  renderModels(value = this.modelSelect?.value ?? this.state.settings.model) {
+  renderModels(value = this.session()?.model ?? this.state.settings.model) {
     if (!this.modelSelect) return;
     this.modelSelect.replaceChildren();
     const add = (id, text) => { const option = el('option', '', text); option.value = id; this.modelSelect.append(option); };
-    add('', '跟随 Codex 默认配置');
+    if (!value) { add('', '请选择模型'); this.modelSelect.lastElementChild.disabled = true; }
     for (const model of this.codexModels || []) add(model.model, model.displayName || model.model);
     if (value && !(this.codexModels || []).some(m => m.model === value)) add(value, `${value}（已保存，未在列表中）`);
     this.modelSelect.value = value;
+    this.modelSelect.title = this.modelSelect.selectedOptions[0]?.textContent || '选择模型';
+    this.renderEfforts();
+  }
+  renderEfforts() {
+    if (!this.effortSelect) return;
+    const session = this.session();
+    const model = this.codexModels?.find(m => m.model === session.model);
+    const options = model?.supportedReasoningEfforts || [];
+    this.effortAvailable = options.length > 0;
+    this.effortSelect.replaceChildren();
+    const add = (value, label) => { const option = el('option', '', label); option.value = value; this.effortSelect.append(option); };
+    const defaultEffort = model?.defaultReasoningEffort;
+    add('', defaultEffort ? `默认 · ${EFFORT_LABELS[defaultEffort] || defaultEffort}` : '默认强度');
+    for (const option of options) add(option.reasoningEffort, EFFORT_LABELS[option.reasoningEffort] || option.reasoningEffort);
+    if (session.effort && !options.some(o => o.reasoningEffort === session.effort)) add(session.effort, `${EFFORT_LABELS[session.effort] || session.effort}（待验证）`);
+    this.effortSelect.value = session.effort || '';
+    this.effortSelect.title = '思考强度：' + this.effortSelect.selectedOptions[0]?.textContent;
+    this.effortSelect.disabled = this.busy || !this.effortAvailable;
+    if (this.modelTrigger) {
+      const effort = session.effort || defaultEffort;
+      const label = EFFORT_LABELS[effort] || effort || '默认';
+      const name = (model?.displayName || session.model || '选择模型').replace(/^(GPT-\d+(?:\.\d+)?)-/, '$1 ');
+      this.modelName.textContent = name; this.effortName.textContent = label;
+      this.modelTrigger.title = `${name} · ${label}`;
+      this.effortHeading.textContent = label;
+      this.effortOptions = options;
+      const index = options.findIndex(o => o.reasoningEffort === effort);
+      this.effortSlider.max = String(Math.max(0, options.length - 1));
+      this.effortSlider.value = String(Math.max(0, index));
+      this.effortSlider.disabled = this.busy || options.length < 2;
+      this.effortSlider.setAttribute('aria-valuetext', label);
+      this.effortSlider.style.setProperty('--cs-effort-fill', `${options.length > 1 ? Math.max(0, index) / (options.length - 1) * 100 : 0}%`);
+      this.effortDots.replaceChildren(...options.map(() => el('span')));
+    }
+  }
+  async changeSelection(modelChanged) {
+    if (this.busy) return;
+    const session = this.session();
+    if (modelChanged && session.model !== this.modelSelect.value) delete session.tokenUsage;
+    session.model = this.modelSelect.value;
+    session.effort = modelChanged ? '' : this.effortSelect.value;
+    this.state.settings.model = session.model; this.state.settings.effort = session.effort;
+    this.controls();
+    try { await this.persist(); } catch { /* persist reports save errors */ }
+  }
+  async turnSelection(session) {
+    const id = session.model;
+    const model = this.codexModels?.find(m => m.model === id);
+    if (!id) throw new Error('请先在输入框下方选择模型');
+    const supported = model?.supportedReasoningEfforts || [];
+    let effort = session.effort || model?.defaultReasoningEffort;
+    if (effort && supported.length && !supported.some(o => o.reasoningEffort === effort)) {
+      if (session.effort) throw new Error('该模型不支持所选思考强度，请重新选择');
+      effort = model.defaultReasoningEffort;
+    }
+    return { model: id, ...(effort ? { effort } : {}) };
   }
   async refreshModels() {
     if (this.modelsLoading || this.busy) return;
-    this.modelsLoading = true; this.modelsRefresh.disabled = true; this.modelHint.textContent = '正在读取可用模型…';
+    this.modelsLoading = true;
     try {
       await this.client.start({ ...this.state.settings, cwd: os.homedir() });
-      const models = []; const cursors = new Set(); let cursor;
+        const models = []; const cursors = new Set(); let cursor;
       do {
         const result = await this.client.request('model/list', { includeHidden: false, ...(cursor ? { cursor } : {}) });
         for (const model of result.data || []) if (!model.hidden && !models.some(m => m.model === model.model)) models.push(model);
@@ -359,9 +513,9 @@ module.exports = class CodexSidebar extends Plugin {
         cursors.add(cursor);
       } while (cursor);
       this.codexModels = models; this.renderModels();
-      this.modelHint.textContent = models.length ? '保存后对新对话生效；已有对话保持原模型。' : '暂未返回模型，可登录后刷新。';
-    } catch (e) { this.modelHint.textContent = `读取失败：${e.message} 可点击刷新重试。`; }
-    finally { this.modelsLoading = false; this.modelsRefresh.disabled = false; }
+      if (this.modelHint) { this.modelHint.textContent = models.length ? '' : '暂未返回模型，请登录后重新打开模型面板。'; this.modelHint.hidden = !!models.length; }
+    } catch (e) { if (this.modelHint) { this.modelHint.textContent = `读取失败：${e.message} 请重新打开模型面板重试。`; this.modelHint.hidden = false; } }
+    finally { this.modelsLoading = false; this.controls(); }
   }
   renderSettings() {
     const panel = this.settingsNode; panel.replaceChildren();
@@ -372,12 +526,6 @@ module.exports = class CodexSidebar extends Plugin {
       label.append(input, el('span', 'cs-muted', hint)); panel.append(label); return input;
     };
     const settings = this.state.settings;
-    const modelField = el('label', 'cs-field'); modelField.append(el('span', 'cs-label', '模型'));
-    this.modelSelect = el('select', 'cs-field-input'); this.modelSelect.setAttribute('aria-label', '选择模型');
-    this.modelHint = el('span', 'cs-muted', '打开设置后自动读取可用模型。');
-    modelField.append(this.modelSelect, this.modelHint); panel.append(modelField);
-    this.modelsRefresh = button('刷新模型', '重新获取可用模型', () => this.refreshModels()); panel.append(this.modelsRefresh);
-    this.renderModels(settings.model);
     this.promptInput = field('前置提示词', '保存后对新对话生效；已有对话保留原提示词。', settings.prompt, true);
     const details = el('details', 'cs-advanced'); details.append(el('summary', '', '连接设置'));
     const fields = [];
@@ -391,17 +539,17 @@ module.exports = class CodexSidebar extends Plugin {
     this.settingsSave = button('保存设置', '保存前置提示词与连接设置', async () => {
       if (this.busy) return;
       const old = this.state.settings;
-      const next = { ...old, prompt: this.promptInput.value, model: this.modelSelect.value };
+      const next = { ...old, prompt: this.promptInput.value };
       for (const [key, input] of fields) next[key] = input.value.trim();
       this.state.settings = next;
       try {
         await this.persist();
         if (next.executable !== old.executable || next.codexHome !== old.codexHome) {
           this.client.stop(); this.connected = false; this.authenticated = false; this.loadedThreads.clear();
-          this.codexModels = []; this.renderModels(next.model); this.modelHint.textContent = '连接配置已变更，请刷新模型。';
+          this.codexModels = []; this.renderModels(); this.refreshModels();
           this.reconnectAttempts = 0; this.autoConnect();
         }
-        this.status('设置已保存。新建对话后使用所选模型和前置提示词。'); this.controls();
+        this.status('设置已保存。新建对话后使用前置提示词。'); this.controls();
         this.settingsFeedback.textContent = '设置已保存。新建对话后生效。';
         this.settingsFeedback.classList.remove('cs-error');
       } catch {
@@ -427,7 +575,7 @@ module.exports = class CodexSidebar extends Plugin {
     await this.client.start({ ...this.state.settings, cwd: os.homedir() });
     const account = await this.client.request('account/read', {});
     this.authenticated = !!account.account || account.requiresOpenaiAuth === false; this.connected = true;
-    if (!this.authenticated) { this.status('Codex 尚未登录，请点击“登录 ChatGPT”。'); return; }
+    if (!this.authenticated) { this.status('Codex 尚未登录，请在本地 Codex 完成登录后重新发送。'); return; }
     this.status('Codex 已连接，正在检查思源 MCP…');
     try {
       const result = await this.client.request('mcpServerStatus/list', {});
@@ -435,32 +583,22 @@ module.exports = class CodexSidebar extends Plugin {
       this.status(siyuan && Object.keys(siyuan.tools || {}).length ? '已连接 · 思源 MCP 可用' : 'Codex 已连接；尚未发现可用的思源 MCP，请检查 Codex 配置。', !siyuan);
     } catch { this.status('Codex 已连接；MCP 状态暂时不可用。'); }
   }
-  async login() {
-    try {
-      await this.client.start({ ...this.state.settings, cwd: os.homedir() });
-      this.loginPending = true; this.controls();
-      const result = await this.client.request('account/login/start', { type: 'chatgpt' });
-      const url = new URL(result.authUrl);
-      if (url.protocol !== 'https:' || !/(^|\.)openai\.com$|(^|\.)chatgpt\.com$/.test(url.hostname)) throw new Error('登录地址不属于 OpenAI。');
-      await nativeRequire('electron').shell.openExternal(url.href);
-      this.status('请在浏览器完成登录，完成后会自动连接。');
-    } catch (e) { this.loginPending = false; this.status(e.message, true); this.controls(); }
-  }
   async send(edited = false) {
     if (!!this.editing !== edited) return;
     const text = (edited ? this.editing.text : this.input.value).trim(); if (!text || this.busy) return;
     this.busy = true; this.stopping = false; this.turnId = null; this.controls();
     const session = this.session(); this.runningSession = session;
     try {
-      if (!this.connected) await this.connect();
-      if (!this.authenticated) throw new Error('请先登录 ChatGPT，再发送消息。');
+      if (!this.connected || !this.authenticated) await this.connect();
+      if (!this.authenticated) throw new Error('请先在本地 Codex 完成登录，再发送消息。');
       if (this.stopping) return;
-      const params = threadParams(session, { ...this.state.settings, cwd: os.homedir() });
+      const selection = await this.turnSelection(session);
+      const params = threadParams({ ...session, model: selection.model }, { ...this.state.settings, cwd: os.homedir() });
       if (this.editing?.sessionId === session.id) {
         const index = this.editing.index;
         const threadId = await this.prepareEditedThread(session, index, params);
         if (this.stopping) return;
-        session.threadId = threadId; this.loadedThreads.add(threadId);
+        session.threadId = threadId; delete session.tokenUsage; this.renderContextUsage(); this.loadedThreads.add(threadId);
         session.messages = session.messages.slice(0, index);
         if (!session.messages.some(m => m.role === 'user')) session.title = text.slice(0, 32);
         this.editing = null;
@@ -479,7 +617,7 @@ module.exports = class CodexSidebar extends Plugin {
       if (!edited) this.input.value = '';
       this.renderSessions(); this.renderMessages(); await this.persist();
       this.status('Codex 正在思考…');
-      const result = await this.client.request('turn/start', { threadId: session.threadId, input: [{ type: 'text', text, text_elements: [] }] });
+      const result = await this.client.request('turn/start', { threadId: session.threadId, ...selection, input: [{ type: 'text', text, text_elements: [] }] });
       userMessage.turnId = result.turn.id; this.persist();
       if (this.busy) this.turnId = result.turn.id;
       if (this.stopping && this.turnId) await this.client.request('turn/interrupt', { threadId: session.threadId, turnId: this.turnId });
@@ -495,8 +633,14 @@ module.exports = class CodexSidebar extends Plugin {
   }
   event(method, p) {
     if (this.unloading) return;
+    if (method === 'thread/tokenUsage/updated') {
+      const session = this.state.sessions.find(s => s.threadId === p.threadId);
+      if (!session) return;
+      session.tokenUsage = p.tokenUsage;
+      if (session === this.session()) this.renderContextUsage();
+      this.persist(); return;
+    }
     if (method === 'account/login/completed') {
-      this.loginPending = false;
       if (p.success) this.connect().catch(e => this.status(e.message, true));
       else this.status(p.error || '登录未完成，请重试。', true);
       this.controls(); return;

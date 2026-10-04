@@ -18,7 +18,7 @@ function harness({ fail = false, authenticated = true } = {}) {
     stop() { calls.push('stop'); }
   }
   class Plugin {
-    async loadData() { return { settings: {}, sessions: [{ id: 'saved', threadId: 'old-thread', messages: [] }], activeId: 'saved' }; }
+    async loadData() { return { settings: {}, sessions: [{ id: 'saved', model: 'test-model', threadId: 'old-thread', messages: [] }], activeId: 'saved' }; }
     async saveData() {}
     addIcons() {}
     addDock() {}
@@ -42,6 +42,41 @@ function harness({ fail = false, authenticated = true } = {}) {
   } };
 }
 const settle = () => new Promise(resolve => setImmediate(resolve));
+
+test('context meter uses latest context rather than lifetime tokens and follows thread events', async () => {
+  const h = harness(); await h.plugin.onload(); await settle(); const p = h.plugin;
+  const notify = (used, capacity) => p.event('thread/tokenUsage/updated', { threadId: 'old-thread', tokenUsage: { last: { totalTokens: used }, total: { totalTokens: 9999999 }, modelContextWindow: capacity } });
+  assert.equal(p.contextUsage(), null);
+  notify(116000, 486000);
+  assert.equal(p.contextUsage().percent, 24); assert.equal(p.contextUsage().remaining, 76);
+  assert.equal(p.contextUsage().used, 116000);
+  notify(20000, 486000); assert.equal(p.contextUsage().percent, 4);
+  notify(999999, 486000); assert.equal(p.contextUsage().remaining, 0);
+  notify(0, 486000); assert.equal(p.contextUsage().percent, 0);
+  notify(100, null); assert.equal(p.contextUsage(), null);
+  p.createSession(); assert.equal(p.contextUsage(), null);
+  notify(116000, 486000); assert.equal(p.contextUsage(), null);
+  p.state.activeId = 'saved'; assert.equal(p.contextUsage().percent, 24);
+  await p.writeQueue; p.onunload();
+});
+
+test('manual selections do not read Codex default configuration', async () => {
+  const h = harness(); await h.plugin.onload(); await settle(); const p = h.plugin;
+  p.client.request = async () => { throw new Error('configuration must not be read'); };
+  p.codexModels = [{ model: 'a', defaultReasoningEffort: 'low', supportedReasoningEfforts: [{ reasoningEffort: 'low' }, { reasoningEffort: 'medium' }] }];
+  const explicit = await p.turnSelection({ model: 'a', effort: '' });
+  assert.equal(explicit.model, 'a'); assert.equal(explicit.effort, 'low');
+  assert.equal((await p.turnSelection({ model: 'a', effort: 'medium' })).effort, 'medium');
+  await assert.rejects(p.turnSelection({ model: 'a', effort: 'ultra' }), /不支持/);
+  p.onunload();
+});
+
+test('legacy follow selection requires a manual model choice', async () => {
+  const h = harness(); await h.plugin.onload(); await settle(); const p = h.plugin;
+  p.codexModels = [{ model: 'server-default', isDefault: true }];
+  await assert.rejects(p.turnSelection({ model: '' }), /请选择|选择模型/);
+  p.onunload();
+});
 
 test('startup connects without mounting the dock or sending a turn, preserving saved chat', async () => {
   const h = harness(); await h.plugin.onload(); await settle();
@@ -128,6 +163,7 @@ test('edited resend forks before the replaced turn and excludes its answer', asy
   p.input = { value: 'draft', focus() {} }; p.editNotice = {};
   p.beginEdit(2); p.editing.text = 'new';
   p.client.request = async (method, params) => {
+    if (method === 'config/read') return { config: { model: 'test-model', model_reasoning_effort: 'medium' } };
     requests.push({ method, params });
     if (method === 'thread/read') return { thread: { turns: [{ id: 't1' }, { id: 't2', status: 'completed' }] } };
     if (method === 'thread/fork') return { thread: { id: 'branch' } };
@@ -162,6 +198,7 @@ test('failed fork preserves original messages and edited text for retry', async 
   s.messages = [{ role: 'user', text: 'old', turnId: 't2' }, { role: 'assistant', text: 'answer' }];
   p.input = { value: '', focus() {} }; p.editNotice = {}; p.beginEdit(0); p.editing.text = 'replacement';
   p.client.request = async method => {
+    if (method === 'config/read') return { config: { model: 'test-model' } };
     if (method === 'thread/read') return { thread: { turns: [{ id: 't1' }, { id: 't2' }] } };
     throw new Error('fork unavailable');
   };
