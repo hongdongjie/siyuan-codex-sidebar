@@ -1,0 +1,87 @@
+.cs-root { display:flex; flex-direction:column; height:100%; min-height:0; min-width:0; width:100%; box-sizing:border-box; color:var(--b3-theme-on-background); background:var(--b3-theme-background); font-family:var(--b3-font-family); font-size:14px; line-height:1.65; }
+.cs-root *, .cs-root *::before, .cs-root *::after, .cs-settings-dialog, .cs-settings-dialog * { box-sizing:border-box; }
+.cs-root [hidden] { display:none !important; }
+.cs-header { display:flex; align-items:center; gap:6px; padding:8px 12px; min-height:49px; border-bottom:1px solid var(--b3-border-color); flex-shrink:0; }
+.cs-header strong { font-size:14px; font-weight:500; }
+.cs-spacer { flex:1; }
+.cs-button { display:inline-flex; align-items:center; justify-content:center; gap:4px; border:0; background:transparent; color:inherit; font:inherit; font-size:12px; min-height:30px; padding:4px 8px; border-radius:4px; cursor:pointer; white-space:nowrap; }
+.cs-button:hover { background:var(--b3-theme-surface); }
+.cs-button:disabled { opacity:.45; cursor:default; }
+.cs-icon { display:block; flex-shrink:0; pointer-events:none; }
+/* SVG presentation attributes lose to SiYuan's global svg and dock icon rules. */
+.cs-root .cs-button svg.cs-icon, .cs-settings-dialog .cs-button svg.cs-icon { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round; }
+.cs-root svg.cs-icon > *, .cs-settings-dialog svg.cs-icon > * { fill:none; stroke:currentColor; stroke-width:1.5; }
+.cs-button.cs-icon-button { width:32px; height:32px; min-height:32px; flex-shrink:0; padding:7px; border-radius:6px; }
+.cs-root .cs-icon-button, .cs-settings-dialog .cs-icon-button { border:0; box-shadow:none; }
+.cs-root .cs-icon-button:focus:not(:focus-visible), .cs-settings-dialog .cs-icon-button:focus:not(:focus-visible) { outline:none; box-shadow:none; }
+.cs-header .cs-icon-button { color:var(--b3-theme-primary); }
+.cs-icon-button:hover:not(:disabled) { background:var(--b3-theme-primary-light, var(--b3-theme-surface)); }
+.cs-icon-button:active:not(:disabled) { background:var(--b3-theme-surface); }
+.cs-icon-button:disabled:hover { background:transparent; }
+.cs-button.cs-primary { background:var(--b3-theme-primary); color:var(--b3-theme-on-primary); }
+.cs-button.cs-primary:hover { filter:brightness(.94); }
+.cs-root :focus-visible, .cs-settings-dialog :focus-visible { outline:2px solid var(--b3-theme-primary); outline-offset:2px; }
+.cs-root ::selection, .cs-settings-dialog ::selection { background:var(--b3-theme-primary-light); }
+.cs-root input, .cs-root textarea, .cs-settings-dialog input, .cs-settings-dialog textarea { caret-color:var(--b3-theme-primary); }
+.cs-root { position:relative; }
+.cs-history { position:absolute; z-index:5; top:48px; right:12px; width:min(300px, calc(100% - 24px)); max-height:calc(100% - 64px); display:flex; flex-direction:column; padding:6px; border-radius:8px; background:var(--b3-theme-background); box-shadow:0 5px 20px rgba(0,0,0,.18); }
+.cs-history-heading { margin:0; padding:8px 10px; font-size:12px; font-weight:500; color:var(--b3-theme-on-surface); }
+.cs-history-list { min-height:0; max-height:320px; overflow:auto; scrollbar-color:var(--b3-scroll-color) transparent; }
+.cs-button.cs-history-item { width:100%; min-height:38px; justify-content:space-between; gap:12px; padding:8px 10px; text-align:left; font-size:13px; }
+.cs-history-title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.cs-history-item[aria-current] { background:var(--b3-theme-surface); }
+.cs-history-check { display:flex; color:var(--b3-theme-primary); }
+.cs-history-check .cs-icon { width:15px; height:15px; }
+.cs-header .cs-icon-button[aria-expanded="true"] { background:var(--b3-theme-primary-light, var(--b3-theme-surface)); }
+.cs-messages { flex:1; min-height:80px; overflow:auto; padding:8px 16px 20px; scrollbar-color:var(--b3-scroll-color) transparent; }
+.cs-message { margin:0 0 24px; min-width:0; }
+.cs-user { width:fit-content; max-width:88%; margin-left:auto; }
+.cs-user > .cs-role { display:none; }
+.cs-user > .cs-body { background:#e3eddc; color:#20351f; padding:12px 16px; border-radius:14px 14px 4px 14px; }
+[data-theme-mode="dark"] .cs-user > .cs-body { background:#29432c; color:#edf5e8; }
+.cs-message-actions { display:flex; justify-content:flex-end; padding-top:4px; }
+.cs-edit-button { width:32px; min-height:32px; color:var(--b3-theme-on-surface); }
+.cs-user.cs-editing { width:100%; max-width:100%; background:var(--b3-theme-surface); padding:12px; border-radius:14px; }
+.cs-inline-input { width:100%; display:block; min-height:90px; max-height:320px; resize:vertical; border:0; background:transparent; color:inherit; font:inherit; line-height:1.65; padding:4px; }
+.cs-inline-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:8px; }
+.cs-inline-actions .cs-button { min-height:34px; padding:5px 12px; border-radius:10px; }
+.cs-inline-actions .cs-button:not(.cs-primary) { background:var(--b3-theme-background); }
+.cs-role { font-size:12px; font-weight:600; margin-bottom:6px; color:var(--b3-theme-on-surface); }
+.cs-body { overflow-wrap:anywhere; min-width:0; }
+.cs-body p { margin:0 0 12px; }
+.cs-body p:last-child { margin:0; }
+.cs-body pre { overflow:auto; max-width:100%; background:var(--b3-theme-surface); padding:10px; border-radius:4px; white-space:pre; }
+.cs-body code { font-family:var(--b3-font-family-code); font-size:12px; }
+.cs-body blockquote { margin:10px 0; padding-left:12px; border-left:1px solid var(--b3-border-color); }
+.cs-body ul, .cs-body ol { padding-left:24px; }
+.cs-body h1, .cs-body h2, .cs-body h3 { font-size:16px; margin:20px 0 8px; }
+.cs-body table { display:block; overflow:auto; border-collapse:collapse; }
+.cs-body td, .cs-body th { border:1px solid var(--b3-border-color); padding:5px 8px; }
+.cs-body a { color:var(--b3-theme-primary); text-underline-offset:3px; }
+.cs-plain { white-space:pre-wrap; }
+.cs-tool { display:none; }
+.cs-status { padding:6px 12px; font-size:12px; color:var(--b3-theme-on-surface); overflow-wrap:anywhere; flex-shrink:0; max-height:100px; overflow:auto; }
+.cs-error { color:var(--b3-theme-error); }
+.cs-composer { padding:4px 12px 12px; flex-shrink:0; }
+.cs-input, .cs-field-input { display:block; width:100%; padding:10px; border:1px solid var(--b3-border-color); border-radius:4px; background:var(--b3-theme-background); color:inherit; font:inherit; font-size:14px; line-height:1.6; }
+.cs-input { resize:vertical; min-height:82px; max-height:200px; }
+.cs-actions { display:flex; flex-wrap:wrap; align-items:center; gap:4px; padding-top:8px; }
+.cs-settings-dialog { width:min(600px, calc(100vw - 32px)); max-height:calc(100dvh - 32px); margin:auto; padding:0; border:0; border-radius:8px; color:var(--b3-theme-on-background); background:var(--b3-theme-background); font-family:var(--b3-font-family); font-size:14px; line-height:1.65; box-shadow:0 12px 40px rgba(0,0,0,.24); overflow:hidden; }
+.cs-settings-dialog[open] { display:flex; flex-direction:column; }
+.cs-settings-dialog::backdrop { background:rgba(0,0,0,.32); }
+.cs-dialog-header { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:12px 20px; border-bottom:1px solid var(--b3-border-color); flex-shrink:0; }
+.cs-dialog-header h2 { margin:0; font-size:16px; font-weight:600; }
+.cs-dialog-header .cs-button { width:32px; height:32px; }
+.cs-settings { padding:20px; min-height:0; overflow:auto; scrollbar-color:var(--b3-scroll-color) transparent; }
+.cs-settings > .cs-button { margin-bottom:16px; }
+.cs-settings-footer { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:12px; }
+.cs-settings-footer [role="status"] { flex:1; min-width:120px; }
+.cs-field { display:flex; flex-direction:column; gap:6px; margin-bottom:16px; }
+.cs-label { font-weight:600; }
+.cs-field textarea { resize:vertical; min-height:100px; }
+.cs-muted { color:var(--b3-theme-on-surface); font-size:12px; }
+.cs-advanced { margin:0 0 16px; }
+.cs-advanced summary { cursor:pointer; margin-bottom:12px; font-size:12px; }
+.cs-approvals { max-height:40%; overflow:auto; }
+.cs-approval { border-top:1px solid var(--b3-border-color); padding:12px; background:var(--b3-theme-surface); }
+.cs-approval-detail { max-height:160px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; font-size:12px; }
