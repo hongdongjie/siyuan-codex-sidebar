@@ -12,6 +12,7 @@ const ICON = '<symbol id="iconCodexSidebar" viewBox="0 0 24 24"><path d="m8 6-6 
 const UI_ICONS = {
   chevron: '<path d="m6 9 6 6 6-6"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
+  star: '<polygon points="12 3 14.78 8.63 21 9.54 16.5 13.93 17.56 20.13 12 17.2 6.44 20.13 7.5 13.93 3 9.54 9.22 8.63 12 3"/>',
   settings: '<path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/>',
   history: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5M12 7v5l4 2"/>',
   check: '<path d="M20 6 9 17l-5-5"/>',
@@ -141,7 +142,10 @@ module.exports = class CodexSidebar extends Plugin {
     });
     this.historyButton = iconButton('history', '历史记录', () => this.toggleHistory());
     this.historyButton.setAttribute('aria-expanded', 'false');
-    header.append(this.newButton, this.historyButton, iconButton('settings', '设置前置提示词与 Codex 连接', () => this.toggleSettings()));
+    this.favoritesButton = iconButton('star', '收藏', () => this.toggleHistory('favorites'));
+    this.favoritesButton.setAttribute('aria-expanded', 'false');
+    this.historyMode = 'history';
+    header.append(this.newButton, this.historyButton, this.favoritesButton, iconButton('settings', '设置前置提示词与 Codex 连接', () => this.toggleSettings()));
     const min = iconButton('minus', '收起侧栏', () => {}, 'block__icon block__icon--show'); min.setAttribute('data-type', 'min');
     header.append(min);
     this.root.append(header);
@@ -149,22 +153,24 @@ module.exports = class CodexSidebar extends Plugin {
     this.historyPanel.id = `cs-history-${Math.random().toString(36).slice(2)}`;
     this.historyPanel.setAttribute('aria-label', '历史记录');
     this.historyButton.setAttribute('aria-controls', this.historyPanel.id);
-    this.historyPanel.append(el('h3', 'cs-history-heading', '历史记录'));
+    this.favoritesButton.setAttribute('aria-controls', this.historyPanel.id);
+    this.historyHeading = el('h3', 'cs-history-heading', '历史记录');
+    this.historyPanel.append(this.historyHeading);
     this.sessionsNode = el('div', 'cs-history-list'); this.historyPanel.append(this.sessionsNode);
     this.root.append(this.historyPanel);
     document.addEventListener('pointerdown', e => {
-      if (!this.historyPanel.contains(e.target) && !this.historyButton.contains(e.target)) this.closeHistory();
+      if (!this.historyPanel.contains(e.target) && !this.historyButton.contains(e.target) && !this.favoritesButton.contains(e.target)) this.closeHistory();
     }, { signal: this.historyEvents.signal });
     document.addEventListener('focusin', e => {
-      if (!this.historyPanel.contains(e.target) && !this.historyButton.contains(e.target)) this.closeHistory();
+      if (!this.historyPanel.contains(e.target) && !this.historyButton.contains(e.target) && !this.favoritesButton.contains(e.target)) this.closeHistory();
     }, { signal: this.historyEvents.signal });
     this.root.addEventListener('keydown', e => {
       if (this.historyPanel.hidden) return;
-      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); this.closeHistory(); this.historyButton.focus(); }
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); this.closeHistory(); (this.historyMode === 'favorites' ? this.favoritesButton : this.historyButton).focus(); }
       if (this.historyPanel.contains(e.target) && ['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) {
         e.preventDefault();
-        const items = [...this.sessionsNode.querySelectorAll('button')];
-        const current = items.indexOf(document.activeElement);
+        const items = [...this.sessionsNode.querySelectorAll('.cs-history-item')];
+        const current = items.indexOf(document.activeElement.closest('.cs-history-row')?.querySelector('.cs-history-item'));
         const next = e.key === 'Home' ? 0 : e.key === 'End' ? items.length - 1 : (current + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
         items[next]?.focus();
       }
@@ -247,8 +253,12 @@ module.exports = class CodexSidebar extends Plugin {
   renderSessions() {
     if (!this.sessionsNode) return;
     this.sessionsNode.replaceChildren();
-    const conversations = this.state.sessions.filter(s => s.messages?.some(m => m.role === 'user' && m.text?.trim()));
-    if (!conversations.length) this.sessionsNode.append(el('div', 'cs-history-heading', '暂无历史对话'));
+    const favorites = this.historyMode === 'favorites';
+    const heading = favorites ? '收藏' : '历史记录';
+    this.historyHeading.textContent = heading;
+    this.historyPanel.setAttribute('aria-label', heading);
+    const conversations = this.state.sessions.filter(s => (!favorites || s.favorite) && s.messages?.some(m => m.role === 'user' && m.text?.trim()));
+    if (!conversations.length) this.sessionsNode.append(el('div', 'cs-history-heading', favorites ? '暂无收藏，点击历史记录中的星星即可收藏。' : '暂无历史对话'));
     for (const s of [...conversations].reverse()) {
       const item = button('', s.title, () => {
         if (this.busy || this.editing) return;
@@ -261,12 +271,25 @@ module.exports = class CodexSidebar extends Plugin {
         item.setAttribute('aria-current', 'true');
         const mark = el('span', 'cs-history-check'); mark.innerHTML = icon('check'); item.append(mark);
       }
-      this.sessionsNode.append(item);
+      const row = el('div', 'cs-history-row');
+      const star = iconButton('star', `${s.favorite ? '取消收藏' : '收藏'}：${s.title}`, () => {
+        const rows = [...this.sessionsNode.children];
+        const rowIndex = rows.indexOf(row);
+        const scrollTop = this.sessionsNode.scrollTop;
+        s.favorite = !s.favorite; this.persist(); this.renderSessions();
+        const nextRows = [...this.sessionsNode.querySelectorAll('.cs-history-row')];
+        const targetRow = nextRows.find(node => node.dataset.sessionId === s.id) || nextRows[Math.min(rowIndex, nextRows.length - 1)];
+        (targetRow?.querySelector('.cs-favorite-button') || this.favoritesButton).focus({ preventScroll: true });
+        this.sessionsNode.scrollTop = scrollTop;
+      }, 'cs-favorite-button');
+      star.setAttribute('aria-pressed', String(!!s.favorite));
+      row.dataset.sessionId = s.id; row.append(item, star); this.sessionsNode.append(row);
     }
   }
   closeHistory() {
     if (this.historyPanel) this.historyPanel.hidden = true;
     this.historyButton?.setAttribute('aria-expanded', 'false');
+    this.favoritesButton?.setAttribute('aria-expanded', 'false');
   }
   closeModelPanel() {
     if (this.modelPanel) this.modelPanel.hidden = true;
@@ -302,11 +325,12 @@ module.exports = class CodexSidebar extends Plugin {
     this.refreshModels();
     this.effortSlider.disabled ? this.modelSelect.focus() : this.effortSlider.focus();
   }
-  toggleHistory() {
+  toggleHistory(mode = 'history') {
     if (this.busy || this.editing) return;
-    if (!this.historyPanel.hidden) { this.closeHistory(); return; }
+    if (!this.historyPanel.hidden && this.historyMode === mode) { this.closeHistory(); return; }
+    this.closeHistory(); this.closeModelPanel(); this.showContextUsage(false); this.historyMode = mode;
     this.renderSessions(); this.historyPanel.hidden = false;
-    this.historyButton.setAttribute('aria-expanded', 'true');
+    (mode === 'favorites' ? this.favoritesButton : this.historyButton).setAttribute('aria-expanded', 'true');
     (this.sessionsNode.querySelector('[aria-current]') || this.sessionsNode.querySelector('button'))?.focus();
   }
   renderMessages() {
@@ -395,6 +419,7 @@ module.exports = class CodexSidebar extends Plugin {
     if (this.inlineSend) this.inlineSend.disabled = this.busy || !this.editing?.text.trim();
     this.input.readOnly = !!this.editing;
     this.newButton.disabled = this.busy || !!this.editing; this.historyButton.disabled = this.busy || !!this.editing;
+    this.favoritesButton.disabled = this.busy || !!this.editing;
     if (this.busy || this.editing) this.closeHistory();
     this.sendButton.disabled = this.busy || !!this.editing || !this.input.value.trim();
     this.stopButton.hidden = !this.busy; this.stopButton.disabled = this.stopping;

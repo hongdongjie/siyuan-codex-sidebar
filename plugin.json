@@ -2,7 +2,7 @@
   "name": "siyuan-codex-sidebar",
   "author": "hongdongjie",
   "url": "https://github.com/hongdongjie/siyuan-codex-sidebar",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "minAppVersion": "3.8.6",
   "backends": [
     "windows"

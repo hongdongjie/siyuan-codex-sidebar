@@ -29,6 +29,11 @@
 .cs-history-list { min-height:0; max-height:320px; overflow:auto; scrollbar-color:var(--b3-scroll-color) transparent; }
 .cs-button.cs-history-item { width:100%; min-height:38px; justify-content:space-between; gap:12px; padding:8px 10px; text-align:left; font-size:13px; }
 .cs-history-title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.cs-history-row { display:flex; align-items:center; gap:2px; padding-right:4px; }
+.cs-history-row .cs-history-item { flex:1; min-width:0; width:auto; }
+.cs-favorite-button { color:var(--b3-theme-on-surface); }
+.cs-favorite-button[aria-pressed="true"] { color:var(--b3-theme-primary); }
+.cs-root .cs-favorite-button[aria-pressed="true"] svg.cs-icon > * { fill:currentColor; }
 .cs-history-item[aria-current] { background:var(--b3-theme-surface); }
 .cs-history-check { display:flex; color:var(--b3-theme-primary); }
 .cs-history-check .cs-icon { width:15px; height:15px; }
@@ -48,6 +53,8 @@
 .cs-inline-actions .cs-button:not(.cs-primary) { background:var(--b3-theme-background); }
 .cs-role { font-size:12px; font-weight:600; margin-bottom:6px; color:var(--b3-theme-on-surface); }
 .cs-body { overflow-wrap:anywhere; min-width:0; }
+/* SiYuan dock/tab containers disable text selection by default. */
+.cs-root .cs-body { -webkit-user-select:text; user-select:text; }
 .cs-body p { margin:0 0 12px; }
 .cs-body p:last-child { margin:0; }
 .cs-body pre { overflow:auto; max-width:100%; background:var(--b3-theme-surface); padding:10px; border-radius:4px; white-space:pre; }
